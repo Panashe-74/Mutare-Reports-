@@ -274,7 +274,7 @@
           (r.photo ? '<img alt="" src="' + r.photo + '">' : "") +
           '<div class="meta"><div class="title">' + esc(r.category) +
           ' <span class="sev ' + esc(r.severity) + '">' + esc(r.severity) + "</span></div>" +
-          '<div class="muted">' + esc(r.suburb || "No area given") + " · " + esc(fmtDate(r.createdAt)) + "</div></div>";
+          '<div class="muted">' + esc(r.suburb || "No area given") + " · " + esc(fmtDate(r.createdAt)) + " · " + esc(syncLabel(r)) + "</div></div>";
         li.addEventListener("click", function () { showDetail(r.id); });
         ul.appendChild(li);
       });
@@ -291,7 +291,8 @@
       '<p class="muted">Area: ' + esc(r.suburb || "n/a") + "<br>" +
       "Location: " + r.lat.toFixed(5) + ", " + r.lng.toFixed(5) +
       (r.accuracy ? " (±" + r.accuracy + " m)" : "") + "<br>" +
-      "Recorded: " + esc(fmtDate(r.createdAt)) + "</p>";
+      "Recorded: " + esc(fmtDate(r.createdAt)) + "<br>" +
+      "Sync: " + esc(syncLabel(r)) + "</p>";
     $("detail-dialog").showModal();
   }
 
@@ -430,14 +431,17 @@
         lng: pickedLatLng.lng,
         accuracy: pickedLatLng.accuracy || null,
         photo: photoDataUrl,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        synced: false,
+        photoUrl: null
       };
       try {
         await dbPut(item);
         $("form-dialog").close();
         clearPicked();
         await refresh();
-        toast("Report saved on this phone");
+        toast(cloudReady() ? "Report saved. Sending…" : "Report saved on this phone");
+        syncPending();
       } catch (err) {
         showFormError("Could not save: " + err.message);
       }
@@ -457,15 +461,128 @@
 
     $("btn-geojson").addEventListener("click", exportGeoJSON);
     $("btn-csv").addEventListener("click", exportCSV);
+    $("btn-sync").addEventListener("click", function () {
+      if (!cloudReady()) { toast("Shared database not set up yet (Step 3)"); return; }
+      syncPending(true);
+    });
 
     function net() {
       var el = $("netstatus");
       el.textContent = navigator.onLine ? "online" : "offline";
       el.classList.toggle("offline", !navigator.onLine);
     }
-    window.addEventListener("online", net);
+    window.addEventListener("online", function () { net(); syncPending(); });
     window.addEventListener("offline", net);
     net();
+  }
+
+  // ---------- cloud sync (Supabase) ----------
+  var CFG = window.APP_CONFIG || {};
+  var syncing = false;
+
+  function cloudReady() {
+    return !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY);
+  }
+
+  function syncLabel(r) {
+    if (!cloudReady()) return "Saved on phone";
+    return r.synced ? "Sent" : "Waiting to send";
+  }
+
+  function sbHeaders(extra) {
+    var h = { apikey: CFG.SUPABASE_ANON_KEY };
+    // Legacy anon keys are JWTs and go in Authorization too; newer publishable keys use apikey only.
+    if (String(CFG.SUPABASE_ANON_KEY).indexOf("eyJ") === 0) {
+      h.Authorization = "Bearer " + CFG.SUPABASE_ANON_KEY;
+    }
+    Object.keys(extra || {}).forEach(function (k) { h[k] = extra[k]; });
+    return h;
+  }
+
+  function dataUrlToBlob(dataUrl) {
+    var parts = dataUrl.split(",");
+    var mime = parts[0].match(/:(.*?);/)[1];
+    var bin = atob(parts[1]);
+    var arr = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return new Blob([arr], { type: mime });
+  }
+
+  async function uploadPhoto(r) {
+    var path = r.id + ".jpg";
+    var res = await fetch(CFG.SUPABASE_URL + "/storage/v1/object/report-photos/" + path, {
+      method: "POST",
+      headers: sbHeaders({ "Content-Type": "image/jpeg" }),
+      body: dataUrlToBlob(r.photo)
+    });
+    if (!res.ok) {
+      var txt = await res.text();
+      // A repeat upload of the same photo is fine: it already arrived earlier.
+      if (txt.indexOf("Duplicate") === -1) throw new Error("photo upload failed (" + res.status + ")");
+    }
+    return CFG.SUPABASE_URL + "/storage/v1/object/public/report-photos/" + path;
+  }
+
+  async function uploadRow(r, photoUrl) {
+    var res = await fetch(CFG.SUPABASE_URL + "/rest/v1/reports?on_conflict=id", {
+      method: "POST",
+      headers: sbHeaders({
+        "Content-Type": "application/json",
+        Prefer: "resolution=ignore-duplicates,return=minimal"
+      }),
+      body: JSON.stringify({
+        id: r.id,
+        category: r.category,
+        severity: r.severity,
+        suburb: r.suburb || null,
+        description: r.description || null,
+        lat: r.lat,
+        lng: r.lng,
+        accuracy_m: r.accuracy || null,
+        photo_url: photoUrl,
+        created_at: r.createdAt
+      })
+    });
+    if (!res.ok) throw new Error("report upload failed (" + res.status + ")");
+  }
+
+  // Sends every report that has not been sent yet. Safe to call repeatedly.
+  async function syncPending(manual) {
+    if (!cloudReady()) return;
+    if (syncing) return;
+    if (!navigator.onLine) {
+      if (manual) toast("No internet right now. Reports will send when you are online.");
+      return;
+    }
+    var pending = reports.filter(function (r) { return !r.synced; });
+    if (!pending.length) {
+      if (manual) toast("Everything is already sent");
+      return;
+    }
+    syncing = true;
+    var sent = 0, failed = 0, lastError = "";
+    try {
+      for (var i = 0; i < pending.length; i++) {
+        var r = pending[i];
+        try {
+          var photoUrl = r.photoUrl || null;
+          if (r.photo && !photoUrl) photoUrl = await uploadPhoto(r);
+          await uploadRow(r, photoUrl);
+          r.synced = true;
+          r.photoUrl = photoUrl;
+          await dbPut(r);
+          sent++;
+        } catch (e) {
+          failed++;
+          lastError = e.message;
+        }
+      }
+    } finally {
+      syncing = false;
+    }
+    renderList();
+    if (sent && !failed) toast(sent + (sent === 1 ? " report sent" : " reports sent"));
+    else if (failed) toast(failed + " could not send (" + lastError + "). Will retry.");
   }
 
   // ---------- categories (from config.js) ----------
@@ -492,6 +609,7 @@
     initMap();
     bindUi();
     await refresh();
+    syncPending();
 
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("sw.js").catch(function () {});

@@ -1,5 +1,5 @@
 /* Service worker: caches the app shell and Leaflet, and map tiles as they are viewed. */
-var VERSION = "v7";
+var VERSION = "v8";
 var SHELL_CACHE = "mutare-shell-" + VERSION;
 var TILE_CACHE = "mutare-tiles-" + VERSION;
 var MAX_TILES = 600;

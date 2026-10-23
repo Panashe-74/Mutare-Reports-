@@ -80,7 +80,7 @@ main {
 .tabs button.active { color: var(--green); font-weight: 700; box-shadow: inset 0 -3px 0 var(--green); }
 
 #view-list { overflow-y: auto; padding: 12px; }
-.toolbar { display: flex; gap: 8px; margin-bottom: 12px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .toolbar button {
   flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--green);
   background: #fff; color: var(--green); font-weight: 600;
