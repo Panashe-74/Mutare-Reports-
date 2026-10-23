@@ -131,31 +131,110 @@
     });
   }
 
-  function setPicked(lat, lng, msg) {
-    pickedLatLng = { lat: lat, lng: lng };
+  var accCircle = null;
+  var watchId = null;
+  var watchTimer = null;
+
+  function setPicked(lat, lng, msg, accuracy) {
+    pickedLatLng = { lat: lat, lng: lng, accuracy: accuracy || null };
     if (pickMarker) map.removeLayer(pickMarker);
-    pickMarker = L.marker([lat, lng]).addTo(map);
+    if (accCircle) { map.removeLayer(accCircle); accCircle = null; }
+    pickMarker = L.marker([lat, lng], { draggable: true }).addTo(map);
+    pickMarker.on("dragend", function () {
+      var p = pickMarker.getLatLng();
+      if (accCircle) { map.removeLayer(accCircle); accCircle = null; }
+      pickedLatLng = { lat: p.lat, lng: p.lng, accuracy: null };
+      $("loc-status").textContent = "Pin moved by hand (" + p.lat.toFixed(5) + ", " + p.lng.toFixed(5) + ")";
+      if (picking) {
+        picking = false;
+        $("pick-banner").hidden = true;
+        $("form-dialog").showModal();
+      }
+    });
+    if (accuracy) {
+      accCircle = L.circle([lat, lng], { radius: accuracy, color: "#0f6b4f", weight: 1, fillOpacity: 0.12 }).addTo(map);
+    }
     $("loc-status").textContent = msg + " (" + lat.toFixed(5) + ", " + lng.toFixed(5) + ")";
   }
 
   function clearPicked() {
+    stopWatch();
     pickedLatLng = null;
     if (pickMarker) { map.removeLayer(pickMarker); pickMarker = null; }
+    if (accCircle) { map.removeLayer(accCircle); accCircle = null; }
     $("loc-status").textContent = "No location yet. Use GPS or pick on the map.";
   }
 
   // ---------- GPS ----------
+  // Listens to the GPS for up to GPS_MAX_MS, averages the good readings (sharper readings
+  // count more), and stops early once the best reading is within GPS_TARGET_M metres.
+  var GPS_TARGET_M = 5;
+  var GPS_MAX_MS = 10000;
+
+  function stopWatch() {
+    if (watchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+    clearTimeout(watchTimer);
+  }
+
+  function gpsQuality(m) {
+    if (m <= 5) return "excellent";
+    if (m <= 10) return "good";
+    if (m <= 30) return "fair";
+    return "poor, so tap GPS again, move outdoors, or adjust the pin on the map";
+  }
+
   function locate() {
-    if (!navigator.geolocation) { toast("GPS not supported on this device"); return; }
-    $("loc-status").textContent = "Getting GPS fix…";
-    navigator.geolocation.getCurrentPosition(function (pos) {
+    if (!navigator.geolocation) {
+      $("loc-status").textContent = "GPS is not supported on this device. Use Pick on map.";
+      return;
+    }
+    stopWatch();
+    var samples = [];
+    var first = true;
+    $("loc-status").textContent = "Getting GPS fix (about 10 seconds). Stay still, ideally outdoors.";
+
+    // Position = weighted average of the good readings; accuracy shown = the best single
+    // reading, which is the cautious figure.
+    function estimate() {
+      var bestAcc = Infinity;
+      samples.forEach(function (s) { if (s.acc < bestAcc) bestAcc = s.acc; });
+      var limit = Math.max(bestAcc * 2, bestAcc + 5);
+      var sw = 0, la = 0, lo = 0;
+      samples.forEach(function (s) {
+        if (s.acc > limit) return;
+        var w = 1 / (s.acc * s.acc);
+        sw += w; la += w * s.lat; lo += w * s.lng;
+      });
+      return { lat: la / sw, lng: lo / sw, accuracy: Math.round(bestAcc) };
+    }
+
+    function finish() {
+      stopWatch();
+      if (!samples.length) {
+        $("loc-status").textContent = "No GPS fix. Move outdoors or use Pick on map.";
+        return;
+      }
+      var e = estimate();
+      setPicked(e.lat, e.lng, "GPS fix ±" + e.accuracy + " m, " + gpsQuality(e.accuracy), e.accuracy);
+      map.setView([e.lat, e.lng], 17);
+    }
+
+    watchId = navigator.geolocation.watchPosition(function (pos) {
       var c = pos.coords;
-      setPicked(c.latitude, c.longitude, "GPS fix, accuracy ±" + Math.round(c.accuracy) + " m");
-      pickedLatLng.accuracy = Math.round(c.accuracy);
-      map.setView([c.latitude, c.longitude], 17);
+      if (!c.accuracy || c.accuracy <= 0) return;
+      samples.push({ lat: c.latitude, lng: c.longitude, acc: c.accuracy });
+      var e = estimate();
+      setPicked(e.lat, e.lng, "Improving, now ±" + e.accuracy + " m", e.accuracy);
+      if (first) { map.setView([e.lat, e.lng], 17); first = false; }
+      if (e.accuracy <= GPS_TARGET_M && samples.length >= 3) finish();
     }, function (err) {
-      $("loc-status").textContent = "GPS failed: " + err.message + ". Tap the map to place the report.";
-    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+      stopWatch();
+      if (samples.length) { finish(); return; }
+      $("loc-status").textContent = "GPS failed: " + err.message + ". Use Pick on map.";
+    }, { enableHighAccuracy: true, timeout: GPS_MAX_MS, maximumAge: 0 });
+
+    watchTimer = setTimeout(finish, GPS_MAX_MS);
   }
 
   // ---------- photo (resized so storage stays small) ----------
@@ -309,6 +388,7 @@
     });
 
     $("btn-pick").addEventListener("click", function () {
+      stopWatch();
       picking = true;
       $("form-dialog").close();
       $("pick-banner").hidden = false;
