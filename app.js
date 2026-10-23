@@ -11,6 +11,7 @@
   var photoDataUrl = null;
   var reports = [];
   var openId = null;
+  var picking = false;
 
   // ---------- helpers ----------
   function $(id) { return document.getElementById(id); }
@@ -21,6 +22,12 @@
     t.classList.add("show");
     clearTimeout(toast._t);
     toast._t = setTimeout(function () { t.classList.remove("show"); }, 2400);
+  }
+
+  function showFormError(msg) {
+    var el = $("form-error");
+    el.textContent = msg;
+    el.hidden = false;
   }
 
   function esc(s) {
@@ -98,6 +105,11 @@
     map.on("click", function (e) {
       if ($("form-dialog").open) return;
       setPicked(e.latlng.lat, e.latlng.lng, "Location picked on map");
+      if (picking) {
+        picking = false;
+        $("pick-banner").hidden = true;
+        $("form-dialog").showModal();
+      }
     });
   }
 
@@ -129,7 +141,7 @@
   function clearPicked() {
     pickedLatLng = null;
     if (pickMarker) { map.removeLayer(pickMarker); pickMarker = null; }
-    $("loc-status").textContent = "No location yet. You can also tap the map.";
+    $("loc-status").textContent = "No location yet. Use GPS or pick on the map.";
   }
 
   // ---------- GPS ----------
@@ -285,10 +297,26 @@
     });
 
     $("btn-new").addEventListener("click", function () {
+      picking = false;
+      $("pick-banner").hidden = true;
       $("report-form").reset();
       photoDataUrl = null;
       $("photo-preview").hidden = true;
+      $("form-error").hidden = true;
       if (!pickedLatLng) clearPicked();
+      $("form-dialog").showModal();
+      if (!pickedLatLng) locate();
+    });
+
+    $("btn-pick").addEventListener("click", function () {
+      picking = true;
+      $("form-dialog").close();
+      $("pick-banner").hidden = false;
+    });
+
+    $("btn-pick-back").addEventListener("click", function () {
+      picking = false;
+      $("pick-banner").hidden = true;
       $("form-dialog").showModal();
     });
 
@@ -307,7 +335,10 @@
 
     $("report-form").addEventListener("submit", async function (e) {
       e.preventDefault();
-      if (!pickedLatLng) { toast("Add a location first (GPS or tap the map)"); return; }
+      if (!pickedLatLng) {
+        showFormError("Add a location first: tap \"Use my GPS location\" or \"Pick on map instead\".");
+        return;
+      }
       var f = new FormData($("report-form"));
       var item = {
         id: uid(),
@@ -328,7 +359,7 @@
         await refresh();
         toast("Report saved on this phone");
       } catch (err) {
-        toast("Could not save: " + err.message);
+        showFormError("Could not save: " + err.message);
       }
     });
 

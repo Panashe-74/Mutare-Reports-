@@ -20,6 +20,10 @@
   <main>
     <section id="view-map" class="view active">
       <div id="map" aria-label="Map of reports"></div>
+      <div id="pick-banner" hidden>
+        <span>Tap the map where the problem is</span>
+        <button type="button" id="btn-pick-back">Back to form</button>
+      </div>
       <button id="btn-new" class="fab" aria-label="New report">+ Report</button>
     </section>
 
@@ -79,8 +83,11 @@
 
       <div class="locrow">
         <button type="button" id="btn-locate">Use my GPS location</button>
-        <span id="loc-status" class="muted">No location yet. You can also tap the map.</span>
+        <button type="button" id="btn-pick">Pick on map instead</button>
+        <span id="loc-status" class="muted">No location yet. Use GPS or pick on the map.</span>
       </div>
+
+      <p id="form-error" class="error" hidden></p>
 
       <div class="actions">
         <button type="button" id="btn-cancel" class="secondary">Cancel</button>
@@ -98,6 +105,22 @@
   </dialog>
 
   <div id="toast" role="status" aria-live="polite"></div>
+  <div id="errbar" hidden></div>
+  <script>
+    // Shows any JavaScript error on screen so problems can be diagnosed on a phone.
+    function showErr(msg) {
+      var b = document.getElementById("errbar");
+      if (!b) return;
+      b.textContent = "Error: " + msg;
+      b.hidden = false;
+    }
+    window.addEventListener("error", function (e) {
+      showErr((e.message || "unknown") + (e.lineno ? " (line " + e.lineno + ")" : ""));
+    });
+    window.addEventListener("unhandledrejection", function (e) {
+      showErr(e.reason && e.reason.message ? e.reason.message : String(e.reason));
+    });
+  </script>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="app.js"></script>
