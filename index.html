@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f6b4f">
+  <title>Mutare Reports</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Mutare Reports</h1>
+    <span id="netstatus" class="pill">online</span>
+  </header>
+
+  <main>
+    <section id="view-map" class="view active">
+      <div id="map" aria-label="Map of reports"></div>
+      <button id="btn-new" class="fab" aria-label="New report">+ Report</button>
+    </section>
+
+    <section id="view-list" class="view">
+      <div class="toolbar">
+        <button id="btn-geojson">Export GeoJSON</button>
+        <button id="btn-csv">Export CSV</button>
+      </div>
+      <ul id="report-list"></ul>
+      <p id="empty" class="muted" hidden>No reports yet. Tap Map, then + Report.</p>
+    </section>
+  </main>
+
+  <nav class="tabs">
+    <button data-view="view-map" class="active">Map</button>
+    <button data-view="view-list">Reports <span id="count" class="pill small">0</span></button>
+  </nav>
+
+  <dialog id="form-dialog">
+    <form id="report-form" method="dialog">
+      <h2>New report</h2>
+
+      <label>Category
+        <select name="category" required>
+          <option value="">Select…</option>
+          <option>Blocked drain</option>
+          <option>Flooding</option>
+          <option>Burst water pipe</option>
+          <option>Sewer overflow</option>
+          <option>Illegal dumping</option>
+          <option>Road damage</option>
+          <option>Street light fault</option>
+          <option>Other</option>
+        </select>
+      </label>
+
+      <label>Severity
+        <select name="severity" required>
+          <option value="Low">Low</option>
+          <option value="Medium" selected>Medium</option>
+          <option value="High">High</option>
+        </select>
+      </label>
+
+      <label>Suburb / area (optional)
+        <input name="suburb" type="text" placeholder="e.g. Sakubva">
+      </label>
+
+      <label>Description
+        <textarea name="description" rows="3" placeholder="What did you see?"></textarea>
+      </label>
+
+      <label>Photo (optional)
+        <input id="photo" name="photo" type="file" accept="image/*" capture="environment">
+      </label>
+      <img id="photo-preview" alt="" hidden>
+
+      <div class="locrow">
+        <button type="button" id="btn-locate">Use my GPS location</button>
+        <span id="loc-status" class="muted">No location yet. You can also tap the map.</span>
+      </div>
+
+      <div class="actions">
+        <button type="button" id="btn-cancel" class="secondary">Cancel</button>
+        <button type="submit" id="btn-save">Save report</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="detail-dialog">
+    <div id="detail-body"></div>
+    <div class="actions">
+      <button id="btn-delete" class="danger">Delete</button>
+      <button id="btn-close" class="secondary">Close</button>
+    </div>
+  </dialog>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
