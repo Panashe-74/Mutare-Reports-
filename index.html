@@ -21,7 +21,7 @@
     <section id="view-map" class="view active">
       <div id="map" aria-label="Map of reports"></div>
       <div id="pick-banner" hidden>
-        <span>Tap the map where the problem is</span>
+        <span>Tap the map, or drag the pin, to set the exact spot</span>
         <button type="button" id="btn-pick-back">Back to form</button>
       </div>
       <button id="btn-new" class="fab" aria-label="New report">+ Report</button>
@@ -49,14 +49,6 @@
       <label>Category
         <select name="category" required>
           <option value="">Select…</option>
-          <option>Blocked drain</option>
-          <option>Flooding</option>
-          <option>Burst water pipe</option>
-          <option>Sewer overflow</option>
-          <option>Illegal dumping</option>
-          <option>Road damage</option>
-          <option>Street light fault</option>
-          <option>Other</option>
         </select>
       </label>
 
@@ -123,6 +115,7 @@
   </script>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

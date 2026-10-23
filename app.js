@@ -468,6 +468,18 @@
     net();
   }
 
+  // ---------- categories (from config.js) ----------
+  var DEFAULT_CATEGORIES = ["Blocked drain", "Flooding", "Burst water pipe", "Sewer overflow",
+    "Illegal dumping", "Road damage", "Street light fault", "Other"];
+
+  function fillCategories() {
+    var cfg = window.APP_CONFIG || {};
+    var list = (cfg.CATEGORIES && cfg.CATEGORIES.length) ? cfg.CATEGORIES : DEFAULT_CATEGORIES;
+    var sel = document.querySelector('#report-form select[name="category"]');
+    sel.innerHTML = '<option value="">Select…</option>' +
+      list.map(function (c) { return "<option>" + esc(c) + "</option>"; }).join("");
+  }
+
   // ---------- start ----------
   async function start() {
     if (typeof L === "undefined") {
@@ -476,6 +488,7 @@
       return;
     }
     db = await openDb();
+    fillCategories();
     initMap();
     bindUi();
     await refresh();

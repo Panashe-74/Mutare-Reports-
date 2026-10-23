@@ -1,5 +1,5 @@
 /* Service worker: caches the app shell and Leaflet, and map tiles as they are viewed. */
-var VERSION = "v6";
+var VERSION = "v7";
 var SHELL_CACHE = "mutare-shell-" + VERSION;
 var TILE_CACHE = "mutare-tiles-" + VERSION;
 var MAX_TILES = 600;
@@ -9,6 +9,7 @@ var SHELL = [
   "./index.html",
   "./style.css",
   "./app.js",
+  "./config.js",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
